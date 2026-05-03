@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Trash2, Copy, ChevronUp, ChevronDown, Archive, RotateCcw } from 'lucide-react';
+import { Eraser, Copy, ChevronUp, ChevronDown, Archive } from 'lucide-react';
 import clsx from 'clsx';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore, type LogType } from '@/stores/appStore';
@@ -31,9 +31,7 @@ export function LogsPanel() {
     toggleSidePanelExpanded,
     activeInstanceId,
     instanceLogs,
-    autoClearLogsOnLaunch,
     clearLogs,
-    setAutoClearLogsOnLaunch,
   } = useAppStore();
   const { state: menuState, show: showMenu, hide: hideMenu } = useContextMenu();
   const { exportModal, handleExportLogs, closeExportModal, openExportedFile } = useExportLogs();
@@ -116,7 +114,7 @@ export function LogsPanel() {
         {
           id: 'clear',
           label: t('logs.clear'),
-          icon: Trash2,
+          icon: Eraser,
           disabled: logs.length === 0,
           danger: true,
           onClick: handleClear,
@@ -206,22 +204,7 @@ export function LogsPanel() {
             )}
             title={t('logs.clear')}
           >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setAutoClearLogsOnLaunch(!autoClearLogsOnLaunch);
-            }}
-            className={clsx(
-              'p-1 rounded-md transition-colors',
-              autoClearLogsOnLaunch
-                ? 'text-accent bg-accent-light'
-                : 'text-text-muted hover:bg-bg-tertiary hover:text-text-secondary',
-            )}
-            title={t('logs.autoClearOnLaunch')}
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
+            <Eraser className="w-3.5 h-3.5" />
           </button>
           {!isMobile && (
             <span
@@ -268,7 +251,7 @@ export function LogsPanel() {
                     {formatLogTime(log.timestamp, i18n.language)}
                   </span>
                   <span
-                    className="min-w-0 flex-1 break-words whitespace-pre-wrap leading-5 focus-content"
+                    className="min-w-0 flex-1 break-words leading-5 focus-content"
                     dangerouslySetInnerHTML={{ __html: log.html }}
                   />
                 </div>
