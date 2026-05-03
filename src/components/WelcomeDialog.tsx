@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { X, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '@/stores/appStore';
-import { resolveContent, simpleMarkdownToHtml } from '@/services/contentResolver';
+import { resolveContent, markdownToHtmlWithLocalImages, markdownToHtml } from '@/services/contentResolver';
 import { getInterfaceLangKey } from '@/i18n';
+import { loggers } from '@/utils/logger';
 
 /**
  * 计算字符串的简单 hash，用于判断内容是否变化
@@ -30,7 +31,7 @@ export function WelcomeDialog() {
   } = useAppStore();
 
   const [isOpen, setIsOpen] = useState(false);
-  const [content, setContent] = useState('');
+  const [html, setHtml] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   // 保存当前内容的 hash，关闭时写入配置
   const contentHashRef = useRef<string>('');
@@ -68,7 +69,13 @@ export function WelcomeDialog() {
         return;
       }
 
-      setContent(resolvedContent);
+      try {
+        const renderedHtml = await markdownToHtmlWithLocalImages(resolvedContent, basePath);
+        setHtml(renderedHtml);
+      } catch (err) {
+        loggers.ui.warn('Welcome markdown 转 HTML 失败，降级为纯 markdown 渲染:', err);
+        setHtml(markdownToHtml(resolvedContent));
+      }
       setIsLoading(false);
       setIsOpen(true);
     };
@@ -115,7 +122,7 @@ export function WelcomeDialog() {
         <div className="flex-1 overflow-y-auto px-6 py-4">
           <div
             className="prose prose-sm max-w-none text-text-secondary"
-            dangerouslySetInnerHTML={{ __html: simpleMarkdownToHtml(content) }}
+            dangerouslySetInnerHTML={{ __html: html }}
           />
         </div>
 
