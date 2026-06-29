@@ -331,9 +331,21 @@ struct WebhookConfig {
     #[serde(default)]
     json: Option<Value>,
     #[serde(default)]
+    body_template: Option<Value>,
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    content: Option<String>,
+    #[serde(default)]
     timeout_secs: Option<u64>,
     #[serde(default)]
     fail_on_non_success: Option<bool>,
+}
+
+struct WebhookPlaceholders {
+    title: String,
+    content: String,
+    time: String,
 }
 
 fn parse_webhook_method(method: Option<&str>, has_body: bool) -> Result<Method, String> {
@@ -382,8 +394,47 @@ fn sanitize_webhook_url(url: &Url) -> String {
     format!("{}://{}/...", url.scheme(), authority)
 }
 
+fn build_webhook_placeholders(title: Option<String>, content: Option<String>) -> WebhookPlaceholders {
+    WebhookPlaceholders {
+        // title 通常會出現在單行通知標題，移除換行可避免破壞部分服務的欄位格式。
+        title: title
+            .unwrap_or_else(|| "MXU".to_string())
+            .replace('\r', "")
+            .replace('\n', ""),
+        // content 保留換行，交由 JSON serializer 正確轉義。
+        content: content.unwrap_or_default().replace('\r', ""),
+        time: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+    }
+}
+
+fn replace_webhook_placeholders(input: &str, placeholders: &WebhookPlaceholders) -> String {
+    input
+        .replace("{title}", &placeholders.title)
+        .replace("{content}", &placeholders.content)
+        .replace("{time}", &placeholders.time)
+}
+
+fn render_webhook_template(value: Value, placeholders: &WebhookPlaceholders) -> Value {
+    match value {
+        Value::String(value) => Value::String(replace_webhook_placeholders(&value, placeholders)),
+        Value::Array(values) => Value::Array(
+            values
+                .into_iter()
+                .map(|value| render_webhook_template(value, placeholders))
+                .collect(),
+        ),
+        Value::Object(values) => Value::Object(
+            values
+                .into_iter()
+                .map(|(key, value)| (key, render_webhook_template(value, placeholders)))
+                .collect(),
+        ),
+        value => value,
+    }
+}
+
 /// MXU_WEBHOOK custom action 回调函数
-/// 从 custom_action_param 中读取 url/method/headers/body，执行 HTTP 请求
+/// 从 custom_action_param 中读取 url/method/headers/body_template，执行 HTTP 请求
 fn mxu_webhook_action_fn(
     _ctx: &maa_framework::context::Context,
     args: &maa_framework::custom::ActionArgs,
@@ -405,6 +456,9 @@ fn mxu_webhook_action_fn(
         headers,
         body,
         json,
+        body_template,
+        title,
+        content,
         timeout_secs,
         fail_on_non_success,
     } = config;
@@ -417,7 +471,14 @@ fn mxu_webhook_action_fn(
         }
     };
 
-    let body = body.or(json);
+    let body = match body_template {
+        Some(template) => {
+            let placeholders = build_webhook_placeholders(title, content);
+            Some(render_webhook_template(template, &placeholders))
+        }
+        None => body.or(json),
+    };
+
     let method = match parse_webhook_method(method.as_deref(), body.is_some()) {
         Ok(value) => value,
         Err(e) => {
